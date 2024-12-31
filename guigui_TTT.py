@@ -61,8 +61,6 @@ def load_combined_model(args, num_classes: int = 1000):
 def main(args):
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
-    print("{}".format(args).replace(', ', ',\n'))
-
 
     is_available = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"{is_available} used for test-time-training")
