@@ -1,5 +1,5 @@
 
-data_path = "drive/MyDrive"
+data_path = "/content/drive/MyDrive/Colab Notebooks/blur_subset"
 print_freq = 50
 finetune_mode = 'encoder'
 model = 'mae_vit_large_patch16'
