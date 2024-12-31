@@ -26,18 +26,18 @@ from .args_TTT import *
 
 def load_combined_model(args, num_classes: int = 1000):
     if args.model == 'mae_vit_small_patch16':
-        classifier_depth = 8
-        classifier_embed_dim = 512
-        classifier_num_heads = 16
+        args.classifier_depth = 8
+        args.classifier_embed_dim = 512
+        args.classifier_num_heads = 16
     else:
         assert 'mae_vit_large_patch16' in args.model or 'mae_vit_huge_patch14' in args.model
-        classifier_embed_dim = 768
-        classifier_depth = 12
-        classifier_num_heads = 12
+        args.classifier_embed_dim = 768
+        args.classifier_depth = 12
+        args.classifier_num_heads = 12
     
     model = models_mae_shared.__dict__[args.model](num_classes=num_classes, head_type=args.head_type, norm_pix_loss=args.norm_pix_loss, 
-                                                   classifier_depth=classifier_depth, classifier_embed_dim=classifier_embed_dim, 
-                                                   classifier_num_heads=classifier_num_heads,
+                                                   classifier_depth=args.classifier_depth, classifier_embed_dim=args.classifier_embed_dim, 
+                                                   classifier_num_heads=args.classifier_num_heads,
                                                    rotation_prediction=False)
     model_checkpoint = torch.load(args.resume_model, map_location='cpu')
     head_checkpoint = torch.load(args.resume_finetune, map_location='cpu')
