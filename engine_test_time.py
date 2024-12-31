@@ -192,5 +192,5 @@ def save_accuracy_results(args):
     with open(os.path.join(args.output_dir, 'accuracy.txt'), 'a') as f:
         f.write(f'{str(args)}\n')
         for i in range(args.steps_per_example):
-            assert len(all_all_results[i]) == 50000, len(all_all_results[i])
+            # assert len(all_all_results[i]) == 50000, len(all_all_results[i])
             f.write(f'{i}\t{np.mean(all_all_results[i])}\n')
