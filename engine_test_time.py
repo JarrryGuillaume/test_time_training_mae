@@ -156,7 +156,7 @@ def train_on_test(base_model: torch.nn.Module,
                             print(f'datapoint {data_iter_step} iter {step_per_example}: class_loss {cls_loss}')
                         all_pred.extend(list(pred.argmax(axis=1).detach().cpu().numpy()))
                     if all_pred: 
-                        acc1 = (stats.mode(all_pred).mode[0] == test_label[0].cpu().detach().numpy()) * 100.
+                        acc1 = (stats.mode(all_pred).mode == test_label[0].cpu().detach().numpy()) * 100.
                     else: 
                         print("There were no prediction done")
                     if (step_per_example + 1) // accum_iter == args.steps_per_example:
