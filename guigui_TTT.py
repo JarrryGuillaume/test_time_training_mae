@@ -94,13 +94,12 @@ def main(args):
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         
-    data_path = args.data_path
 
-    dataset_train = tt_image_folder.ExtendedImageFolder(data_path, transform=transform_train, minimizer=None, 
+    dataset_train = tt_image_folder.ExtendedImageFolder(args.data_path, transform=transform_train, minimizer=None, 
                                                         batch_size=args.batch_size, steps_per_example=args.steps_per_example * args.accum_iter, 
                                                         single_crop=args.single_crop, start_index=max_known_file+1)
 
-    dataset_val = tt_image_folder.ExtendedImageFolder(data_path, transform=transform_val, 
+    dataset_val = tt_image_folder.ExtendedImageFolder(args.data_path, transform=transform_val, 
                                                         batch_size=1, minimizer=None, 
                                                         single_crop=args.single_crop, start_index=max_known_file+1)
 
