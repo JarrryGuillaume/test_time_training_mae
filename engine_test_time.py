@@ -243,10 +243,10 @@ def train_on_test(base_model: torch.nn.Module,
 
     # 4. Now that the loop is done, do a single final save in memory once
     #    Save both arrays to disk
-    with open(os.path.join(args.output_dir, 'results_final.npy'), 'wb') as f:
+    with open(os.path.join(args.output_dir, f'final_results_{dataset_len}.npy'), 'wb') as f:
         np.save(f, np.array(all_results_global, dtype=object))
 
-    with open(os.path.join(args.output_dir, 'losses_final.npy'), 'wb') as f:
+    with open(os.path.join(args.output_dir, f'final_results_{dataset_len}.npy'), 'wb') as f:
         np.save(f, np.array(all_losses_global, dtype=object))
 
     # 5. Optionally compute final metrics and write them to a file.
@@ -257,7 +257,6 @@ def train_on_test(base_model: torch.nn.Module,
         all_results_global
     )
 
-    
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
   
