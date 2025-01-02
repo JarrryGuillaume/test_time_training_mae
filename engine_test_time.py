@@ -257,14 +257,10 @@ def train_on_test(base_model: torch.nn.Module,
         all_results_global
     )
 
-    try:
-        print("Averaged stats:", metric_logger)
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    except:
-        pass
-
-    return
-
+    
+    print("Averaged stats:", metric_logger)
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+  
 
 
 def save_accuracy_results_in_memory(args, all_results_global):
