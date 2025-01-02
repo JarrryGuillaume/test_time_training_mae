@@ -75,125 +75,210 @@ def _reinitialize_model(base_model, base_optimizer, base_scalar, clone_model, ar
     return clone_model, optimizer, loss_scaler
 
 
+import sys
+import math
+import os
+import glob
+import numpy as np
+import torch
+
+# Example import for your own modules; adjust as needed
+# from models_mae_shared import ...
+# import misc
+# from misc import MetricLogger
+# etc.
+
 def train_on_test(base_model: torch.nn.Module,
                   base_optimizer,
                   base_scalar,
-                  dataset_train, dataset_val,
+                  dataset_train,
+                  dataset_val,
                   device: torch.device,
                   log_writer=None,
                   args=None,
-                  num_classes: int = 1000, 
+                  num_classes: int = 1000,
                   iter_start: int = 0):
+
+    # 1. Configure classifier depth and embedding sizes
     if args.model == 'mae_vit_small_patch16':
         classifier_depth = 8
         classifier_embed_dim = 512
         classifier_num_heads = 16
-    else: 
-        assert ('mae_vit_huge_patch14' in args.model or args.model == 'mae_vit_large_patch16') 
+    else:
+        assert ('mae_vit_huge_patch14' in args.model or args.model == 'mae_vit_large_patch16')
         classifier_embed_dim = 768
         classifier_depth = 12
         classifier_num_heads = 12
-    clone_model = models_mae_shared.__dict__[args.model](num_classes=num_classes, head_type=args.head_type, 
-                                                         norm_pix_loss=args.norm_pix_loss, 
-                                                         classifier_depth=classifier_depth, classifier_embed_dim=classifier_embed_dim, 
-                                                         classifier_num_heads=classifier_num_heads,
-                                                         rotation_prediction=False)
-    # Intialize the model for the current run
-    all_results = [list() for i in range(args.steps_per_example)]
-    all_losses =  [list() for i in range(args.steps_per_example)]
+
+    clone_model = models_mae_shared.__dict__[args.model](
+        num_classes=num_classes,
+        head_type=args.head_type,
+        norm_pix_loss=args.norm_pix_loss,
+        classifier_depth=classifier_depth,
+        classifier_embed_dim=classifier_embed_dim,
+        classifier_num_heads=classifier_num_heads,
+        rotation_prediction=False
+    )
+
+    # 2. Instead of re-initializing for partial saves, keep big containers in memory
+    #    We'll store results for *the entire run*, i.e. across *all datapoints*.
+    #    Each index i in all_results_global[i] or all_losses_global[i] corresponds
+    #    to that step_per_example (i.e. 0 <= i < args.steps_per_example).
+    all_results_global = [list() for _ in range(args.steps_per_example)]
+    all_losses_global = [list() for _ in range(args.steps_per_example)]
+
     metric_logger = misc.MetricLogger(delimiter="  ")
-    train_loader = iter(torch.utils.data.DataLoader(dataset_train, batch_size=1, shuffle=False, num_workers=args.num_workers))
-    val_loader = iter(torch.utils.data.DataLoader(dataset_val, batch_size=1, shuffle=False, num_workers=args.num_workers))
+    train_loader = iter(torch.utils.data.DataLoader(
+        dataset_train, batch_size=1, shuffle=False, num_workers=args.num_workers
+    ))
+    val_loader = iter(torch.utils.data.DataLoader(
+        dataset_val, batch_size=1, shuffle=False, num_workers=args.num_workers
+    ))
+
     accum_iter = args.accum_iter
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    
-    model, optimizer, loss_scaler = _reinitialize_model(base_model, base_optimizer, base_scalar, clone_model, args, device)
+
+    # Reinitialize model
+    model, optimizer, loss_scaler = _reinitialize_model(
+        base_model, base_optimizer, base_scalar, clone_model, args, device
+    )
+
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
+
     dataset_len = len(dataset_val)
+
+    # 3. Main loop
     for data_iter_step in range(iter_start, dataset_len):
         val_data = next(val_loader)
         (test_samples, test_label) = val_data
         test_samples = test_samples.to(device, non_blocking=True)[0]
         test_label = test_label.to(device, non_blocking=True)
-        pseudo_labels = None
-        # Test time training:
+
+        # We do test-time training for args.steps_per_example * accum_iter steps
         for step_per_example in range(args.steps_per_example * accum_iter):
             train_data = next(train_loader)
-            # Train data are 2 values [image, class]
-            mask_ratio = args.mask_ratio
             samples, _ = train_data
-            targets_rot, samples_rot = None, None
-            samples = samples.to(device, non_blocking=True)[0] # index [0] becuase the data is batched to have size 1.
-            loss_dict, _, _, _ = model(samples, None, mask_ratio=mask_ratio)
+            samples = samples.to(device, non_blocking=True)[0]
+
+            # Forward
+            loss_dict, _, _, _ = model(samples, None, mask_ratio=args.mask_ratio)
             loss = torch.stack([loss_dict[l] for l in loss_dict]).sum()
             loss_value = loss.item()
             loss /= accum_iter
+
             if not math.isfinite(loss_value):
                 print("Loss is {}, stopping training".format(loss_value))
                 sys.exit(1)
-            loss_scaler(loss, optimizer, parameters=model.parameters(),
-                        update_grad=(step_per_example + 1) % accum_iter == 0)
+
+            # Gradient update
+            loss_scaler(
+                loss, 
+                optimizer, 
+                parameters=model.parameters(),
+                update_grad=((step_per_example + 1) % accum_iter == 0)
+            )
+
+            # Only log & zero_grad every accum_iter steps
             if (step_per_example + 1) % accum_iter == 0:
                 if args.verbose:
                     print(f'datapoint {data_iter_step} iter {step_per_example}: rec_loss {loss_value}')
-                
-                all_losses[step_per_example // accum_iter].append(loss_value/accum_iter)
+
+                # Append the reconstruction loss (div by accum_iter) to the losses container
+                step_index = step_per_example // accum_iter
+                all_losses_global[step_index].append(loss_value / accum_iter)
+
                 optimizer.zero_grad()
-                    
-            metric_logger.update(**{k:v.item() for k,v in loss_dict.items()})
+
+            # Log metrics
+            metric_logger.update(**{k: v.item() for k, v in loss_dict.items()})
             lr = optimizer.param_groups[0]["lr"]
             metric_logger.update(lr=lr)
-            # Test:
+
+            # Test classification performance every accum_iter steps
             if (step_per_example + 1) % accum_iter == 0:
                 with torch.no_grad():
                     model.eval()
                     all_pred = []
                     for _ in range(accum_iter):
-                        loss_d, _, _, pred = model(test_samples, test_label, mask_ratio=0, reconstruct=False)
+                        loss_d, _, _, pred = model(
+                            test_samples,
+                            test_label,
+                            mask_ratio=0,
+                            reconstruct=False
+                        )
                         if args.verbose:
                             cls_loss = loss_d['classification'].item()
                             print(f'datapoint {data_iter_step} iter {step_per_example}: class_loss {cls_loss}')
-                        all_pred.extend(list(pred.argmax(axis=1).detach().cpu().numpy()))
-                    if all_pred: 
-                        acc1 = (stats.mode(all_pred).mode == test_label[0].cpu().detach().numpy()) * 100.
-                    else: 
-                        print("There were no prediction done")
-                    if (step_per_example + 1) // accum_iter == args.steps_per_example:
+                        all_pred.extend(pred.argmax(dim=1).cpu().numpy())
+
+                    if len(all_pred) > 0:
+                        # majority vote
+                        acc1 = (stats.mode(all_pred).mode == test_label[0].cpu().item()) * 100.
+                    else:
+                        acc1 = 0.
+                        print("There were no predictions done")
+
+                    # Keep track of the accuracy for that step
+                    all_results_global[step_index].append(acc1)
+
+                    if step_index + 1 == args.steps_per_example:
                         metric_logger.update(top1_acc=acc1)
                         metric_logger.update(loss=loss_value)
-                    all_results[step_per_example // accum_iter].append(acc1)
+
+                    # Return to training mode
                     model.train()
+
+        # Optional: print progress every N steps
         if data_iter_step % 50 == 1:
-            print('step: {}, acc {} rec-loss {}'.format(data_iter_step, np.mean(all_results[-1]), loss_value))
-        if data_iter_step % 500 == 499 or (data_iter_step == dataset_len - 1):
-            with open(os.path.join(args.output_dir, f'results_{data_iter_step}.npy'), 'wb') as f:
-                np.save(f, np.array(all_results))
-            with open(os.path.join(args.output_dir, f'losses_{data_iter_step}.npy'), 'wb') as f:
-                np.save(f, np.array(all_losses))
-            all_results = [list() for i in range(args.steps_per_example)]
-            all_losses = [list() for i in range(args.steps_per_example)]
-        model, optimizer, loss_scaler = _reinitialize_model(base_model, base_optimizer, base_scalar, clone_model, args, device)
-    save_accuracy_results(args)
-    # gather the stats from all processes
+            print('step: {}, acc {:.2f}, rec-loss {:.4f}'.format(
+                data_iter_step, np.mean(all_results_global[-1]), loss_value)
+            )
+
+        # IMPORTANT: do not reset all_results / all_losses here.
+        # Reinitialize the model after each data point
+        model, optimizer, loss_scaler = _reinitialize_model(
+            base_model, base_optimizer, base_scalar, clone_model, args, device
+        )
+
+    # 4. Now that the loop is done, do a single final save in memory once
+    #    Save both arrays to disk
+    with open(os.path.join(args.output_dir, 'results_final.npy'), 'wb') as f:
+        np.save(f, np.array(all_results_global, dtype=object))
+
+    with open(os.path.join(args.output_dir, 'losses_final.npy'), 'wb') as f:
+        np.save(f, np.array(all_losses_global, dtype=object))
+
+    # 5. Optionally compute final metrics and write them to a file.
+    #    We can replace the old "save_accuracy_results(args)" with a new helper that
+    #    just takes the final in-memory arrays:
+    save_accuracy_results_in_memory(
+        args,
+        all_results_global
+    )
+
     try:
         print("Averaged stats:", metric_logger)
         return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
     except:
         pass
-    return 
+
+    return
 
 
-def save_accuracy_results(args):
-    all_all_results = [list() for i in range(args.steps_per_example)]
-    for file_number, f_name in enumerate(glob.glob(os.path.join(args.output_dir, 'results_*.npy'))):
-        all_data = np.load(f_name)
-        for step in range(args.steps_per_example):
-            all_all_results[step] += all_data[step].tolist()
+
+def save_accuracy_results_in_memory(args, all_results_global):
+    """
+    Example function to compute final accuracy from your in-memory results
+    and dump to disk. You no longer need to read multiple results_*.npy files.
+    """
+    # For each test-time-training step (0..args.steps_per_example-1),
+    # compute the global average:
     with open(os.path.join(args.output_dir, 'model-final.pth'), 'w') as f:
-        f.write(f'Done!\n')
+        f.write('Done!\n')
+
     with open(os.path.join(args.output_dir, 'accuracy.txt'), 'a') as f:
         f.write(f'{str(args)}\n')
-        for i in range(args.steps_per_example):
-            # assert len(all_all_results[i]) == 50000, len(all_all_results[i])
-            f.write(f'{i}\t{np.mean(all_all_results[i])}\n')
+        for step_i, step_results in enumerate(all_results_global):
+            step_acc = np.mean(step_results) if len(step_results) > 0 else 0.0
+            f.write(f'Step {step_i}\t{step_acc:.2f}\n')
