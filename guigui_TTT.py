@@ -115,8 +115,8 @@ def main(args):
     wandb_config = vars(args)
     base_lr = (args.lr * 256 / eff_batch_size)
     wandb_config['base_lr'] = base_lr
-    print("base lr: %.2e" % base_lr)
-    print("actual lr: %.2e" % args.lr)
+    print("base lr: %.5e" % base_lr)
+    print("actual lr: %.5e" % args.lr)
 
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
