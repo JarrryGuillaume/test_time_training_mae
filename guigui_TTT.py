@@ -112,8 +112,6 @@ def main(args):
 
     eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
     
-    args.lr = args.blr * eff_batch_size / 256
-
     wandb_config = vars(args)
     base_lr = (args.lr * 256 / eff_batch_size)
     wandb_config['base_lr'] = base_lr
