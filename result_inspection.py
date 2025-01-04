@@ -6,6 +6,9 @@ import util.misc as misc
 import models_mae_shared
 from data import tt_image_folder
 
+import numpy as np 
+import matplotlib.pyplot as plt
+
 import test_time_training_mae.models_mae_shared as models_mae_shared
 from test_time_training_mae.engine_test_time import _reinitialize_model
 from test_time_training_mae.guigui_TTT import load_combined_model
@@ -138,3 +141,33 @@ def plot_TTT(base_model: torch.nn.Module,
         predictions.append(pred)
 
     return predictions, all_losses
+
+def load_statistics(dataset_name, n_samples, comp_folder=""): 
+    final_results = np.load(f"{comp_folder}output_mae/{dataset_name}/final_results_{n_samples}.npy", allow_pickle=True)
+    final_losses = np.load(f"{comp_folder}output_mae/{dataset_name}/final_losses_{n_samples}.npy", allow_pickle=True)
+    return final_results, final_losses
+
+def plot_statistics(dataset_name, n_samples, comp_folder=""):
+    final_results, final_losses = load_statistics(dataset_name, n_samples, comp_folder=comp_folder)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))  
+    fig.suptitle(f"{dataset_name} TTT results")
+
+    mean_accuracy = np.mean(final_results, axis=1)
+    mean_reconstruction_loss = np.mean(final_losses, axis=1)
+
+    indices = np.arange(len(final_results))
+    ax1.bar(indices, mean_accuracy, color='blue', label='Final Results')
+    ax1.set_title("Mean Accuracy")
+    ax1.set_xlabel("Nth step")
+    ax1.set_ylabel("Values")
+    ax1.set_xticks(indices)
+
+    ax2.bar(indices, mean_reconstruction_loss, color='orange', label='Final Losses')
+    ax2.set_title("Average reconstruction loss")
+    ax2.set_xlabel("N step")
+    ax2.set_ylabel("Values")
+    ax2.set_xticks(indices)
+
+    plt.tight_layout()
+    plt.show()
