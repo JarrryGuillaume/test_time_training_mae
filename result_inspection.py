@@ -103,50 +103,50 @@ def plot_TTT(base_model: torch.nn.Module,
     predictions = []
     all_results = []
     (test_samples, test_label) = test_image
-    test_samples = test_samples.to(device, non_blocking=True)[0]
+    test_samples = test_samples.to(device, non_blocking=True)
     test_label = torch.tensor(test_label).to(device, non_blocking=True)
 
     for step_per_example in range(args.steps_per_example * accum_iter):
-            train_data = next(train_images)
-            samples, _ = train_data
-            samples = samples.to(device, non_blocking=True)
+        train_data = next(train_images)
+        samples, _ = train_data
+        samples = samples.to(device, non_blocking=True)
 
-            # Forward
-            loss_dict, pred, latent, head = model(samples, None, mask_ratio=args.mask_ratio)
-            loss = torch.stack([loss_dict[l] for l in loss_dict]).sum()
-            loss_value = loss.item()
-            loss /= accum_iter
+        # Forward
+        loss_dict, pred, latent, head = model(samples, None, mask_ratio=args.mask_ratio)
+        loss = torch.stack([loss_dict[l] for l in loss_dict]).sum()
+        loss_value = loss.item()
+        loss /= accum_iter
 
-            # Gradient update
-            loss_scaler(
-                loss, 
-                optimizer, 
-                parameters=model.parameters(),
-                update_grad=((step_per_example + 1) % accum_iter == 0)
-            )
+        # Gradient update
+        loss_scaler(
+            loss, 
+            optimizer, 
+            parameters=model.parameters(),
+            update_grad=((step_per_example + 1) % accum_iter == 0)
+        )
 
-            if (step_per_example + 1) % accum_iter == 0:
-                all_losses.append(loss_value / accum_iter)
+        if (step_per_example + 1) % accum_iter == 0:
+            all_losses.append(loss_value / accum_iter)
 
+            if args.verbose:
+                print(f'datapoint {step_per_example} iter {step_per_example}: rec_loss {loss_value}')
+
+            optimizer.zero_grad()
+
+        predictions.append(pred)
+
+        with torch.no_grad():
+            model.eval()
+            all_pred = []
+            for _ in range(accum_iter):
+                loss_d, _, _, pred = model(test_samples, test_label, mask_ratio=0, reconstruct=False)
                 if args.verbose:
-                    print(f'datapoint {step_per_example} iter {step_per_example}: rec_loss {loss_value}')
-
-                optimizer.zero_grad()
-
-            predictions.append(pred)
-
-            with torch.no_grad():
-                model.eval()
-                all_pred = []
-                for _ in range(accum_iter):
-                    loss_d, _, _, pred = model(test_samples, test_label, mask_ratio=0, reconstruct=False)
-                    if args.verbose:
-                        cls_loss = loss_d['classification'].item()
-                        print(f'iter {step_per_example}: class_loss {cls_loss}')
-                    all_pred.extend(list(pred.argmax(axis=1).detach().cpu().numpy()))
-                acc1 = (stats.mode(all_pred).mode == test_label[0].cpu().detach().numpy()) * 100.
-                all_results.append(acc1)
-                model.train()
+                    cls_loss = loss_d['classification'].item()
+                    print(f'iter {step_per_example}: class_loss {cls_loss}')
+                all_pred.extend(list(pred.argmax(axis=1).detach().cpu().numpy()))
+            acc1 = (stats.mode(all_pred).mode == test_label[0].cpu().detach().numpy()) * 100.
+            all_results.append(acc1)
+            model.train()
     
     return predictions, all_losses, all_results
 
