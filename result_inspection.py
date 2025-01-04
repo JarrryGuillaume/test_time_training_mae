@@ -73,68 +73,64 @@ def load_dataset(args):
 
     return dataset_train, dataset_val
 
-def get_images(chosen_image, dataset_train, dataset_val, args): 
+def get_image(chosen_image, dataset_train, dataset_val, args):
     test_image = dataset_val[chosen_image]
-    train_images = [dataset_train[chosen_image + i] for i in range(args.step_per_example)]
+    train_images = [dataset_train[chosen_image * args.steps_per_example + i] for i in range(args.steps_per_example)]
     return test_image, train_images
 
 def plot_TTT(base_model: torch.nn.Module,
              base_optimizer,
              base_scaler,
-             test_image,
-             train_images,
+             chosen_image,
             device: torch.device,
             log_writer=None,
             args=None,
             num_classes: int = 1000,
             iter_start: int = 0):
 
+    test_image, train_images = get_image(chosen_image)
     clone_model = get_clone_model(args, num_classes)
     model, optimizer, loss_scaler = _reinitialize_model(
         base_model, base_optimizer, base_scaler, clone_model, args, device
     )
     accum_iter = args.accum_iter
-    
+
     train_images = iter(train_images)
 
     all_losses = []
     predictions = []
-
-    val_data = test_image
-    (test_samples, test_label) = val_data
+    (test_samples, test_label) = test_image
     test_samples = test_samples.to(device, non_blocking=True)[0]
-    test_label = test_label.to(device, non_blocking=True)
+    test_label = torch.tensor(test_label).to(device, non_blocking=True)
 
     for step_per_example in range(args.steps_per_example * accum_iter):
-        train_data = next(train_images)
-        samples, _ = train_data
-        samples = samples.to(device, non_blocking=True)[0]
+            train_data = next(train_images)
+            samples, _ = train_data
+            samples = samples.to(device, non_blocking=True)
 
-        # Forward
-        loss_dict, pred, latent, head = model(samples, None, mask_ratio=args.mask_ratio)
-        loss = torch.stack([loss_dict[l] for l in loss_dict]).sum()
-        loss_value = loss.item()
-        loss /= accum_iter
+            # Forward
+            loss_dict, pred, latent, head = model(samples, None, mask_ratio=args.mask_ratio)
+            loss = torch.stack([loss_dict[l] for l in loss_dict]).sum()
+            loss_value = loss.item()
+            loss /= accum_iter
 
-        # Gradient update
-        loss_scaler(
-            loss, 
-            optimizer, 
-            parameters=model.parameters(),
-            update_grad=((step_per_example + 1) % accum_iter == 0)
-        )
+            # Gradient update
+            loss_scaler(
+                loss, 
+                optimizer, 
+                parameters=model.parameters(),
+                update_grad=((step_per_example + 1) % accum_iter == 0)
+            )
 
-        if (step_per_example + 1) % accum_iter == 0:
-            all_losses.append(loss_value / accum_iter)
+            if (step_per_example + 1) % accum_iter == 0:
+                all_losses.append(loss_value / accum_iter)
 
-            if args.verbose:
-                print(f'datapoint {step_per_example} iter {step_per_example}: rec_loss {loss_value}')
+                if args.verbose:
+                    print(f'datapoint {step_per_example} iter {step_per_example}: rec_loss {loss_value}')
 
-            optimizer.zero_grad()
+                optimizer.zero_grad()
 
-        predictions.append(pred)
-
-    return predictions, all_losses
+            predictions.append(pred)
 
 def load_statistics(dataset_name, n_samples, comp_folder=""): 
     final_results = np.load(f"{comp_folder}output_mae/{dataset_name}/final_results_{n_samples}.npy", allow_pickle=True)
@@ -165,3 +161,15 @@ def plot_statistics(dataset_name, n_samples, comp_folder=""):
 
     plt.tight_layout()
     plt.show()
+
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD  = [0.229, 0.224, 0.225]
+
+def denormalize(tensor, mean=IMAGENET_MEAN, std=IMAGENET_STD):
+    denorm = tensor.clone()
+    
+    for c, (m, s) in enumerate(zip(mean, std)):
+        denorm[c] = denorm[c] * s + m
+        
+    denorm = torch.clamp(denorm, 0.0, 1.0)
+    return denorm.permute(1, 2, 0).cpu().numpy()
