@@ -71,17 +71,11 @@ def load_dataset(args):
                                                         batch_size=1, minimizer=None, 
                                                         single_crop=args.single_crop, start_index=0)
 
-    train_loader = torch.utils.data.DataLoader(
-        dataset_train, batch_size=1, shuffle=False, num_workers=args.num_workers
-    )
-    val_loader = torch.utils.data.DataLoader(
-        dataset_val, batch_size=1, shuffle=False, num_workers=args.num_workers
-    )
-    return train_loader, val_loader
+    return dataset_train, dataset_val
 
-def get_images(chosen_image, train_loader, val_loader, args): 
-    test_image = val_loader[chosen_image]
-    train_images = [train_loader[chosen_image + i] for i in range(args.step_per_example)]
+def get_images(chosen_image, dataset_train, dataset_val, args): 
+    test_image = dataset_val[chosen_image]
+    train_images = [dataset_train[chosen_image + i] for i in range(args.step_per_example)]
     return test_image, train_images
 
 def plot_TTT(base_model: torch.nn.Module,
