@@ -131,6 +131,8 @@ def plot_TTT(base_model: torch.nn.Module,
                 optimizer.zero_grad()
 
             predictions.append(pred)
+    
+    return predictions, all_losses
 
 def load_statistics(dataset_name, n_samples, comp_folder=""): 
     final_results = np.load(f"{comp_folder}output_mae/{dataset_name}/final_results_{n_samples}.npy", allow_pickle=True)
