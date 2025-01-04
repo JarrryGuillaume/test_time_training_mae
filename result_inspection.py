@@ -81,14 +81,14 @@ def get_image(chosen_image, dataset_train, dataset_val, args):
 def plot_TTT(base_model: torch.nn.Module,
              base_optimizer,
              base_scaler,
-             chosen_image,
+             test_image,
+             train_images,
             device: torch.device,
             log_writer=None,
             args=None,
             num_classes: int = 1000,
             iter_start: int = 0):
 
-    test_image, train_images = get_image(chosen_image)
     clone_model = get_clone_model(args, num_classes)
     model, optimizer, loss_scaler = _reinitialize_model(
         base_model, base_optimizer, base_scaler, clone_model, args, device
