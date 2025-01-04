@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import test_time_training_mae.models_mae_shared as models_mae_shared
 from test_time_training_mae.engine_test_time import _reinitialize_model
 from test_time_training_mae.guigui_TTT import load_combined_model
+from scipy import stats
+
 
 def get_clone_model(args, num_classes=1000):
     is_available = "cuda" if torch.cuda.is_available() else "cpu"
@@ -99,6 +101,7 @@ def plot_TTT(base_model: torch.nn.Module,
 
     all_losses = []
     predictions = []
+    all_results = []
     (test_samples, test_label) = test_image
     test_samples = test_samples.to(device, non_blocking=True)[0]
     test_label = torch.tensor(test_label).to(device, non_blocking=True)
@@ -131,8 +134,21 @@ def plot_TTT(base_model: torch.nn.Module,
                 optimizer.zero_grad()
 
             predictions.append(pred)
+
+            with torch.no_grad():
+                model.eval()
+                all_pred = []
+                for _ in range(accum_iter):
+                    loss_d, _, _, pred = model(test_samples, test_label, mask_ratio=0, reconstruct=False)
+                    if args.verbose:
+                        cls_loss = loss_d['classification'].item()
+                        print(f'iter {step_per_example}: class_loss {cls_loss}')
+                    all_pred.extend(list(pred.argmax(axis=1).detach().cpu().numpy()))
+                acc1 = (stats.mode(all_pred).mode == test_label[0].cpu().detach().numpy()) * 100.
+                all_results.append(acc1)
+                model.train()
     
-    return predictions, all_losses
+    return predictions, all_losses, all_results
 
 def load_statistics(dataset_name, n_samples, comp_folder=""): 
     final_results = np.load(f"{comp_folder}output_mae/{dataset_name}/final_results_{n_samples}.npy", allow_pickle=True)
