@@ -20,6 +20,7 @@ from scipy import stats
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import timm.optim.optim_factory as optim_factory
+from torch.utils.data import Subset, DataLoader
 import glob
 
 
@@ -122,14 +123,20 @@ def train_on_test(base_model: torch.nn.Module,
     all_results_global = [list() for _ in range(args.steps_per_example)]
     all_losses_global = [list() for _ in range(args.steps_per_example)]
 
+
+    if args.shuffle_dataset: 
+        subset_val = args.rng.permutation(args.max_iter)
+        subset_train = np.array([[index + i for i in range(args.steps_per_example)] for index in subset_val]).flatten()
+        dataset_train = Subset(dataset_train, subset_train)
+        dataset_val = Subset(dataset_val, subset_val)
+
     metric_logger = misc.MetricLogger(delimiter="  ")
+
     train_loader = iter(torch.utils.data.DataLoader(
         dataset_train, batch_size=1, shuffle=args.shuffle_dataset, num_workers=args.num_workers, 
-        generator=args.generator,
     ))
     val_loader = iter(torch.utils.data.DataLoader(
         dataset_val, batch_size=1, shuffle=args.shuffle_dataset, num_workers=args.num_workers, 
-        generator=args.generator
     ))
 
     accum_iter = args.accum_iter
