@@ -124,10 +124,12 @@ def train_on_test(base_model: torch.nn.Module,
 
     metric_logger = misc.MetricLogger(delimiter="  ")
     train_loader = iter(torch.utils.data.DataLoader(
-        dataset_train, batch_size=1, shuffle=False, num_workers=args.num_workers
+        dataset_train, batch_size=1, shuffle=args.shuffle_dataset, num_workers=args.num_workers, 
+        generator=args.generator,
     ))
     val_loader = iter(torch.utils.data.DataLoader(
-        dataset_val, batch_size=1, shuffle=False, num_workers=args.num_workers
+        dataset_val, batch_size=1, shuffle=args.shuffle_dataset, num_workers=args.num_workers, 
+        generator=args.generator
     ))
 
     accum_iter = args.accum_iter
