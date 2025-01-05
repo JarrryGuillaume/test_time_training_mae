@@ -242,10 +242,11 @@ def train_on_test(base_model: torch.nn.Module,
     # 4. Now that the loop is done, do a single final save in memory once
     #    Save both arrays to disk
     online = "online" if args.online else "offline"
-    with open(os.path.join(args.output_dir, f'final_results_{dataset_len}_{online}_{args.steps_per_example}.npy'), 'wb') as f:
+    shuffle = "shuffled" if args.shuffle_dataset else ""
+    with open(os.path.join(args.output_dir, f'final_results_{dataset_len}_{online}_{args.steps_per_example}_{shuffle}.npy'), 'wb') as f:
         np.save(f, np.array(all_results_global, dtype=object))
 
-    with open(os.path.join(args.output_dir, f'final_losses_{dataset_len}_{online}_{args.steps_per_example}.npy'), 'wb') as f:
+    with open(os.path.join(args.output_dir, f'final_losses_{dataset_len}_{online}_{args.steps_per_example}_{shuffle}.npy'), 'wb') as f:
         np.save(f, np.array(all_losses_global, dtype=object))
 
     # 5. Optionally compute final metrics and write them to a file.
