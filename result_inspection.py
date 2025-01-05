@@ -92,19 +92,18 @@ def plot_TTT(base_model: torch.nn.Module,
             iter_start: int = 0):
 
     clone_model = get_clone_model(args, num_classes)
+
     model, optimizer, loss_scaler = _reinitialize_model(
-        base_model, base_optimizer, base_scaler, clone_model, args, device
-    )
-    accum_iter = args.accum_iter
-
+            base_model, base_optimizer, base_scaler, clone_model, args, device
+        )
     train_images = iter(train_images)
-
+    accum_iter = args.accum_iter
     all_losses = []
     predictions = []
     all_results = []
     (test_samples, test_label) = test_image
     test_samples = test_samples.to(device, non_blocking=True)
-    test_label = torch.tensor(test_label).to(device, non_blocking=True)
+    test_label = torch.tensor([test_label]).to(device, non_blocking=True)
 
     for step_per_example in range(args.steps_per_example * accum_iter):
         train_data = next(train_images)
@@ -148,7 +147,7 @@ def plot_TTT(base_model: torch.nn.Module,
             all_results.append(acc1)
             model.train()
     
-    return predictions, all_losses, all_results
+    return predictions, all_losses, all_results, all_pred
 
 def load_statistics(dataset_name, n_samples, comp_folder=""): 
     final_results = np.load(f"{comp_folder}output_mae/{dataset_name}/final_results_{n_samples}.npy", allow_pickle=True)
