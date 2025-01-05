@@ -82,12 +82,6 @@ import glob
 import numpy as np
 import torch
 
-# Example import for your own modules; adjust as needed
-# from models_mae_shared import ...
-# import misc
-# from misc import MetricLogger
-# etc.
-
 def train_on_test(base_model: torch.nn.Module,
                   base_optimizer,
                   base_scalar,
@@ -97,7 +91,8 @@ def train_on_test(base_model: torch.nn.Module,
                   log_writer=None,
                   args=None,
                   num_classes: int = 1000,
-                  iter_start: int = 0):
+                  iter_start: int = 0,
+                ):
 
     # 1. Configure classifier depth and embedding sizes
     if args.model == 'mae_vit_small_patch16':
@@ -146,7 +141,7 @@ def train_on_test(base_model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    dataset_len = len(dataset_val)
+    dataset_len = min(len(dataset_val), args.max_iter)
 
     # 3. Main loop
     for data_iter_step in range(iter_start, dataset_len):
@@ -237,9 +232,10 @@ def train_on_test(base_model: torch.nn.Module,
 
         # IMPORTANT: do not reset all_results / all_losses here.
         # Reinitialize the model after each data point
-        model, optimizer, loss_scaler = _reinitialize_model(
-            base_model, base_optimizer, base_scalar, clone_model, args, device
-        )
+        if args.online: 
+            model, optimizer, loss_scaler = _reinitialize_model(
+                base_model, base_optimizer, base_scalar, clone_model, args, device
+            )
 
     # 4. Now that the loop is done, do a single final save in memory once
     #    Save both arrays to disk
