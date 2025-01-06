@@ -126,7 +126,7 @@ def train_on_test(base_model: torch.nn.Module,
 
     if args.shuffle_dataset: 
         subset_val = args.rng.permutation(args.max_iter)
-        subset_train = np.array([[index + i for i in range(args.steps_per_example)] for index in subset_val]).flatten()
+        subset_train = np.array([[index * args.steps_per_example + i for i in range(args.steps_per_example)] for index in subset_val]).flatten()
         dataset_train = Subset(dataset_train, subset_train)
         dataset_val = Subset(dataset_val, subset_val)
 
